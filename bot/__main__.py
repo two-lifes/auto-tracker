@@ -16,6 +16,7 @@ from bot.app import build_dispatcher
 from bot.clock import utcnow
 from bot.config import Config, ConfigError, load_config
 from bot.db.session import create_engine, create_sessionmaker
+from bot.fsm import DbStorage
 from bot.scheduler import run_scheduler
 from bot.services.deployments import record_startup
 
@@ -53,10 +54,11 @@ async def main(config: Config) -> None:
         session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    dp = build_dispatcher(config.allowed_user_ids)
+    dp = build_dispatcher(config.allowed_user_ids, DbStorage(sessionmaker))
     db_lock = asyncio.Lock()
     dp["sessionmaker"] = sessionmaker
     dp["db_lock"] = db_lock
+    dp["default_tz"] = config.default_tz
     dp["started_at"] = started_at
     dp["app_version"] = config.app_version
 

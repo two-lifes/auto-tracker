@@ -12,8 +12,11 @@ from sqlalchemy import select
 from bot.app import build_dispatcher
 from bot.db.models import Base
 from bot.db.session import create_engine, create_sessionmaker
+from bot.fsm import DbStorage
 from bot.scheduler import tick
 from tests.tg_fakes import OWNER_ID, FakeSession, callback_update, text_update
+
+TZ = "Europe/Moscow"
 
 TELEGRAM_TAGS = {"b", "i", "u", "s", "code", "pre", "a", "blockquote", "tg-spoiler"}
 
@@ -56,7 +59,7 @@ class Harness:
     async def feed(self, update) -> None:
         await self.dp.feed_update(
             self.bot, update, sessionmaker=self.sessionmaker, db_lock=self.db_lock,
-            started_at=self.started_at, app_version=self.app_version,
+            started_at=self.started_at, app_version=self.app_version, default_tz=TZ,
         )
 
     async def text(self, text: str, user_id: int = OWNER_ID) -> str | None:
@@ -89,7 +92,7 @@ class Harness:
 @cache
 def shared_dispatcher():
     # Routers are module-level and can be attached to only one dispatcher per process
-    return build_dispatcher({OWNER_ID})
+    return build_dispatcher({OWNER_ID}, DbStorage())
 
 
 # FSM state is keyed by bot id, so a fresh bot id per test isolates dialog state
@@ -103,4 +106,8 @@ async def make_harness(db_path, clock) -> tuple[Harness, object]:
         await conn.run_sync(Base.metadata.create_all)
     net = FakeSession()
     bot = Bot(token=f"{next(_bot_ids)}:TEST", session=net)
-    return Harness(shared_dispatcher(), bot, net, create_sessionmaker(engine), clock), engine
+    sessionmaker = create_sessionmaker(engine)
+    dp = shared_dispatcher()
+    # The dispatcher is shared by all tests; its dialog storage follows the current test DB
+    dp.fsm.storage.sessionmaker = sessionmaker
+    return Harness(dp, bot, net, sessionmaker, clock), engine

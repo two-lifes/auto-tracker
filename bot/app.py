@@ -3,6 +3,7 @@ from collections.abc import Iterable
 
 from aiogram import Dispatcher
 from aiogram.exceptions import TelegramAPIError
+from aiogram.fsm.storage.base import BaseStorage
 from aiogram.types import ErrorEvent
 
 from bot import views
@@ -26,13 +27,14 @@ async def on_error(event: ErrorEvent) -> None:
         log.exception("Could not tell the user about the error")
 
 
-def build_dispatcher(allowed_user_ids: Iterable[int]) -> Dispatcher:
+def build_dispatcher(allowed_user_ids: Iterable[int], storage: BaseStorage) -> Dispatcher:
     """Call once per process: handler routers are module-level and attach to one parent only.
 
     Before polling put into workflow data: ``sessionmaker``, ``db_lock`` (asyncio.Lock shared
-    with the scheduler), ``started_at`` (UTC start time) and ``app_version`` (None locally).
+    with the scheduler), ``default_tz``, ``started_at`` (UTC start time) and ``app_version``
+    (None locally).
     """
-    dp = Dispatcher()
+    dp = Dispatcher(storage=storage)
     # Whitelist runs first so strangers never touch the database
     dp.update.outer_middleware(WhitelistMiddleware(allowed_user_ids))
     dp.update.outer_middleware(DbSessionMiddleware())
