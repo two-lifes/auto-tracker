@@ -57,6 +57,8 @@ chmod 600 /opt/auto_tracker/.env
 sudo systemctl enable docker                  # Docker стартует при загрузке, бот — вместе с ним
 ```
 `DATA_DIR` в серверном `.env` не нужен: compose задаёт `/data`.
+`.env` должен принадлежать пользователю деплоя: не создавайте его через `sudo`, иначе
+`docker compose` на сервере получит `permission denied` (исправление: `sudo chown <deploy_user> /opt/auto_tracker/.env`).
 Если пакет образа в GHCR приватный — `docker login ghcr.io` на сервере токеном с `read:packages`.
 
 ### Ключ деплоя (на своей машине)
