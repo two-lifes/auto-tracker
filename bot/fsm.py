@@ -7,6 +7,7 @@ handler, so inside an update the storage uses the update's own session (``use_se
 the state commits or rolls back together with the data it describes.
 """
 
+import copy
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -91,7 +92,8 @@ class DbStorage(BaseStorage):
 
     async def get_data(self, key: StorageKey) -> dict[str, Any]:
         row = await self._read(key)
-        return dict(row.data) if row else {}
+        # A deep copy: handlers change nested values, which must not leak into the ORM row
+        return copy.deepcopy(row.data) if row else {}
 
     async def close(self) -> None:
         pass

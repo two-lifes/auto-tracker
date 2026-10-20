@@ -1,12 +1,14 @@
 """Runs the real dispatcher against a temporary DB and a fake Telegram network."""
 
 import asyncio
+import html
 import itertools
 import re
 from functools import cache
 from html.parser import HTMLParser
 
 from aiogram import Bot
+from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy import select
 
 from bot.app import build_dispatcher
@@ -14,6 +16,7 @@ from bot.db.models import Base
 from bot.db.session import create_engine, create_sessionmaker
 from bot.fsm import DbStorage
 from bot.scheduler import tick
+from bot.views import NBSP
 from tests.tg_fakes import OWNER_ID, FakeSession, callback_update, text_update
 
 TZ = "Europe/Moscow"
@@ -44,8 +47,8 @@ def check_telegram_html(text: str) -> None:
 
 
 def plain(text: str) -> str:
-    """Tests compare plain text: no HTML tags."""
-    return re.sub(r"<[^>]+>", "", text)
+    """Tests compare plain text: no HTML tags, ordinary spaces instead of NBSP in numbers."""
+    return html.unescape(re.sub(r"<[^>]+>", "", text)).replace(NBSP, " ")
 
 
 class Harness:
@@ -81,6 +84,20 @@ class Harness:
         await self.feed(callback_update(data, inaccessible=inaccessible))
         return self._last_since(before)
 
+    def buttons(self) -> dict[str, str]:
+        """Inline buttons of the latest bot message that has them: text -> callback data."""
+        for method in reversed(self.net.requests):
+            markup = getattr(method, "reply_markup", None)
+            if isinstance(markup, InlineKeyboardMarkup):
+                return {b.text: b.callback_data for row in markup.inline_keyboard for b in row}
+        return {}
+
+    async def press(self, text: str) -> str | None:
+        """Taps the inline button labelled ``text`` in the latest message with buttons."""
+        found = self.buttons()
+        assert text in found, f"no button {text!r} among {list(found)}"
+        return await self.tap(found[text])
+
     async def all(self, model):
         async with self.sessionmaker() as session:
             return list(await session.scalars(select(model).order_by(model.id)))
@@ -111,3 +128,22 @@ async def make_harness(db_path, clock) -> tuple[Harness, object]:
     # The dispatcher is shared by all tests; its dialog storage follows the current test DB
     dp.fsm.storage.sessionmaker = sessionmaker
     return Harness(dp, bot, net, sessionmaker, clock), engine
+
+
+async def add_car(
+    h: Harness, name: str = "Октавия", mileage: str = "152 300", first: bool = True
+) -> None:
+    """Goes through the profile dialog, skipping every optional field.
+
+    ``first``: the owner's first car, offered by /start; later ones come from 🚗 Авто.
+    """
+    if first:
+        await h.text("/start")
+    else:
+        await h.text("/car")
+        await h.press("➕ Добавить авто")
+    await h.text(name)
+    await h.text(mileage)
+    while "Пропустить" in h.buttons():
+        await h.press("Пропустить")
+    await h.press("Сохранить")

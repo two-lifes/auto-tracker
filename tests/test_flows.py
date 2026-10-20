@@ -6,7 +6,14 @@ from aiogram.types import ReplyKeyboardMarkup
 
 from bot import views
 from bot.db.models import User
-from bot.keyboards import MENU_BUTTONS
+from bot.keyboards import (
+    MENU_BUTTONS,
+    MENU_HISTORY,
+    MENU_PHOTOS,
+    MENU_RECORD,
+    MENU_REMINDERS,
+)
+from tests.harness import plain
 from tests.tg_fakes import OWNER_ID, STRANGER_ID, sticker_update
 
 
@@ -27,12 +34,16 @@ async def test_stranger_is_ignored(h):
     assert h.net.requests == []
 
 
-async def test_start_registers_owner_and_shows_menu(h):
-    reply = await h.text("/start")
-    assert "Автодневник" in reply
-    assert _menu_texts(h.net.sent()[-1]) == list(MENU_BUTTONS)
+async def test_start_registers_owner(h):
+    await h.text("/start")
+    assert "Автодневник" in plain(h.net.texts()[0])
     users = await h.all(User)
     assert [(u.tg_id, u.name) for u in users] == [(OWNER_ID, "Test")]
+
+
+async def test_menu_keyboard(h):
+    await h.text("/menu")
+    assert _menu_texts(h.net.sent()[-1]) == list(MENU_BUTTONS)
 
 
 async def test_repeated_start_keeps_one_owner(h):
@@ -41,25 +52,24 @@ async def test_repeated_start_keeps_one_owner(h):
     assert len(await h.all(User)) == 1
 
 
-async def test_menu_and_help(h):
-    assert await h.text("/menu") == views.MENU
+async def test_menu_and_help_without_car(h):
+    assert await h.text("/menu") == views.NO_CAR
     assert "/cancel" in await h.text("/help")
 
 
-async def test_menu_buttons_are_placeholders(h):
-    await h.text("/start")
-    for button in MENU_BUTTONS:
+async def test_later_sections_are_placeholders(h):
+    for button in (MENU_RECORD, MENU_HISTORY, MENU_REMINDERS, MENU_PHOTOS):
         assert await h.text(button) == views.SECTION_SOON
 
 
 async def test_cancel_without_dialog(h):
-    assert await h.text("/cancel") == views.NOTHING_TO_CANCEL
+    assert (await h.text("/cancel")).startswith(views.NOTHING_TO_CANCEL)
 
 
 async def test_cancel_resets_dialog(h):
     state = h.dp.fsm.get_context(h.bot, chat_id=OWNER_ID, user_id=OWNER_ID)
     await state.set_state(_Dialog.step)
-    assert await h.text("/cancel") == views.CANCELLED
+    assert (await h.text("/cancel")).startswith(views.CANCELLED)
     assert await state.get_state() is None
 
 
