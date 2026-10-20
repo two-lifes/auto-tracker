@@ -39,15 +39,18 @@
 - Тесты на Python 3.12 в Docker: `docker build --target test .`
 
 ## Структура
-- `bot/services/` — логика; чистые функции без I/O покрываются юнит-тестами. `deployments` — версии.
-- `bot/handlers/` — Telegram; `bot/views.py` — все тексты; `bot/keyboards/` — кнопки.
+- `bot/services/` — логика. Чистые, с юнит-тестами (`tests/test_rules.py`): `parse` (форматы ввода), `mileage` (правила пробега), `dates`. С БД: `profiles` (машины и показания), `deployments` (версии).
+- `bot/handlers/` — Telegram: `profile_form` (мастер профиля), `cars`, `mileage`, `settings`, `start`; `common` — `ANSWER`, `send_menu`, `show`. `bot/views.py` — все тексты; `bot/keyboards/` — кнопки и callback-данные.
+- `bot/fsm.py` — состояние диалогов в SQLite (в транзакции апдейта).
 - `bot/scheduler.py` — цикл раз в 60 с: уведомления о версиях (напоминания — этап 6).
-- Диалоговые тесты: `tests/test_flows.py` через `tests/harness.py` (фейковый Telegram, управляемые часы).
+- Диалоговые тесты: `tests/test_flows.py`, `tests/test_stage1.py` через `tests/harness.py` (фейковый Telegram, управляемые часы, `press("текст кнопки")`, `add_car`).
 
 ## Соглашения
 - Время только через `bot.clock.utcnow()`; в SQLite хранится UTC (`as_utc`).
 - Записи в БД — под общим `db_lock` (хэндлеры и планировщик).
 - Сообщения в Telegram HTML; пользовательский и внешний текст экранировать `html.escape`.
+- Текстовые ответы в шагах диалога ловить фильтром `ANSWER`: команды и кнопки меню выходят из сценария.
+- Даты показаний — локальная дата владельца (`common.today`), не UTC.
 
 ## Деплой
 push в main → GitHub Actions (тесты в Docker) → образ `ghcr.io/two-lifes/auto_tracker` →
